@@ -70,47 +70,45 @@ def generate_test():
         return jsonify({"message": "Sum of counts for categories, difficulties, or types does not match total_questions."}), 400
 
     selected_questions = []
-    remaining_questions = []
-    available_pool = df_questions.to_dict(orient='records')
-    random.shuffle(available_pool)
+    remaining_category = category_counts.copy()
+    remaining_difficulty = difficulty_counts.copy()
+    remaining_type = type_counts.copy()
 
-    current_category_selected = {cat: 0 for cat in category_counts}
-    current_difficulty_selected = {diff: 0 for diff in difficulty_counts}
-    current_type_selected = {q_type: 0 for q_type in type_counts}
+    shuffled_questions = df_questions.to_dict(orient='records')
+    random.shuffle(shuffled_questions)
 
-    for question in available_pool:
-        if len(selected_questions) >= total_questions:
-            break
+    # --- STEP 1: STRICTLY FILL CATEGORIES FIRST ---
+    category_based_selection = []
+    for question in shuffled_questions:
+        if remaining_category[question['category']] > 0:
+            category_based_selection.append(question)
+            remaining_category[question['category']] -= 1
+            if sum(remaining_category.values()) == 0:
+                break  # Stop once all categories are filled
 
-        q_id = question['id']
-        q_category = question['category']
-        q_difficulty = question['difficulty']
-        q_type = question['type']
-
-        if q_category not in category_counts or \
-           q_difficulty not in difficulty_counts or \
-           q_type not in type_counts:
-           continue
-
-        can_add = True
-        can_add_diff = True
-        can_add_type = True
-        
-        if current_category_selected[q_category] >= category_counts[q_category]:
-            can_add = False
-        if current_difficulty_selected[q_difficulty] >= difficulty_counts[q_difficulty]:
-            can_add_diff = False
-        if current_type_selected[q_type] >= type_counts[q_type]:
-            can_add_type = False
-        
-        if can_add or can_add_diff or can_add_type:
+    # --- STEP 2: NOW FILTER FOR DIFFICULTY/TYPE ---
+    for question in category_based_selection:
+        if (remaining_difficulty[question['difficulty']] > 0 and
+            remaining_type[question['type']] > 0):
+            
             selected_questions.append(question)
-            current_category_selected[q_category] += 1
-            current_difficulty_selected[q_difficulty] += 1
-            current_type_selected[q_type] += 1
-    
+            remaining_difficulty[question['difficulty']] -= 1
+            remaining_type[question['type']] -= 1
+
+    # --- STEP 3: IF MISSING QUESTIONS, RELAX DIFFICULTY/TYPE ---
     if len(selected_questions) < total_questions:
-        print(current_category_selected[q_category])
+        for question in category_based_selection:
+            if question not in selected_questions:
+                if (remaining_difficulty[question['difficulty']] > 0 or
+                    remaining_type[question['type']] > 0):
+                    
+                    selected_questions.append(question)
+                    remaining_difficulty[question['difficulty']] -= 1
+                    remaining_type[question['type']] -= 1
+
+    # --- FINAL CHECK ---
+    if len(selected_questions) < total_questions:
+        print(f"Warning: Only {len(selected_questions)}/{total_questions} selected. Check CSV data.")
 
     return jsonify(selected_questions)
 
