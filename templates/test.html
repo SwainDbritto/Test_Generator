@@ -750,76 +750,90 @@
     //     // ... (all the logic for generating sample questions) ...
     // }
 
-    // Display results (minor modifications to badge display for type and category names)
-    function displayResults(questions, catA, catB, catC, easy, medium, hard) {
-        // Update summary - these values represent what was *requested*,
-        // not necessarily what was *returned* if backend couldn't fulfill exactly.
-        document.getElementById('summaryTotal').textContent = questions.length; // Use actual returned length
-        document.getElementById('summaryCatA').textContent = catA;
-        document.getElementById('summaryCatB').textContent = catB;
-        document.getElementById('summaryCatC').textContent = catC;
-        document.getElementById('summaryEasy').textContent = easy;
-        document.getElementById('summaryMedium').textContent = medium;
-        document.getElementById('summaryHard').textContent = hard;
+    // Display results - UPDATED to show actual counts from generated questions
+function displayResults(questions, catA, catB, catC, easy, medium, hard) {
+    // Calculate ACTUAL counts from the generated questions
+    const actualCatA = questions.filter(q => q.category === 'A').length;
+    const actualCatB = questions.filter(q => q.category === 'B').length;
+    const actualCatC = questions.filter(q => q.category === 'C').length;
+    
+    const actualEasy = questions.filter(q => q.difficulty === 'Easy').length;
+    const actualMedium = questions.filter(q => q.difficulty === 'Medium').length;
+    const actualHard = questions.filter(q => q.difficulty === 'Hard').length;
+    
+    // Update summary with ACTUAL counts
+    document.getElementById('summaryTotal').textContent = questions.length;
+    document.getElementById('summaryCatA').textContent = actualCatA;
+    document.getElementById('summaryCatB').textContent = actualCatB;
+    document.getElementById('summaryCatC').textContent = actualCatC;
+    document.getElementById('summaryEasy').textContent = actualEasy;
+    document.getElementById('summaryMedium').textContent = actualMedium;
+    document.getElementById('summaryHard').textContent = actualHard;
 
-        // Render questions
-        questionsList.innerHTML = '';
-        if (questions.length === 0) {
-            questionsList.innerHTML = '<li class="list-group-item">No questions found matching the criteria.</li>';
-            resultsContainer.classList.remove('d-none');
-            resultsContainer.scrollIntoView({ behavior: 'smooth' });
-            return;
-        }
+    // Update the distribution badges with ACTUAL counts
+    const distroBadgesContainer = document.querySelector('.alert-primary .d-flex.gap-2');
+    distroBadgesContainer.innerHTML = `
+        <span class="badge bg-primary distro-badge">A:${actualCatA}</span>
+        <span class="badge bg-info distro-badge">B:${actualCatB}</span>
+        <span class="badge bg-danger distro-badge">C:${actualCatC}</span>
+    `;
 
-        questions.forEach((q, index) => {
-            const li = document.createElement('li');
-            li.className = 'list-group-item d-flex justify-content-between align-items-start question-item';
-
-            // Determine badge classes based on actual data from backend
-            // Ensure these strings match the 'difficulty', 'type', and 'category' values in your CSV
-            const difficultyClass =
-                q.difficulty === 'Easy' ? 'bg-success' :
-                q.difficulty === 'Medium' ? 'bg-warning text-dark' : 'bg-danger';
-
-            // Use the 'type' value directly from the backend, which comes from the CSV
-            const typeClass =
-                q.type === 'Fill in the Blanks' ? 'bg-primary' :
-                q.type === 'True/False' ? 'bg-info' : 'bg-purple'; // Assuming 'bg-purple' is defined in your CSS
-
-            const categoryClass =
-                q.category === 'A' ? 'bg-primary' :
-                q.category === 'B' ? 'bg-info' : 'bg-danger';
-
-            // Helper to map category/type codes to full names for display
-            const getCategoryFullName = (categoryCode) => {
-                switch(categoryCode) {
-                    case 'A': return 'General Knowledge';
-                    case 'B': return 'Science & Technology';
-                    case 'C': return 'History & Culture';
-                    default: return categoryCode;
-                }
-            };
-
-            li.innerHTML = `
-                <div class="ms-2 me-auto">
-                    <div class="fw-bold">${index + 1}. ${q.question}</div>
-                    <div class="mt-2 d-flex flex-wrap gap-1">
-                        <span class="badge ${difficultyClass} difficulty-badge">${q.difficulty}</span>
-                        <span class="badge ${typeClass} type-badge">${q.type}</span>
-                        <span class="badge bg-secondary category-badge">${getCategoryFullName(q.category)}</span>
-                    </div>
-                </div>
-                <span class="badge ${categoryClass} rounded-pill">${q.category}</span>
-            `;
-            questionsList.appendChild(li);
-        });
-
-        // Show results section
+    // Render questions
+    questionsList.innerHTML = '';
+    if (questions.length === 0) {
+        questionsList.innerHTML = '<li class="list-group-item">No questions found matching the criteria.</li>';
         resultsContainer.classList.remove('d-none');
-
-        // Scroll to results
         resultsContainer.scrollIntoView({ behavior: 'smooth' });
+        return;
     }
+
+    questions.forEach((q, index) => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-start question-item';
+
+        // Determine badge classes based on actual data from backend
+        const difficultyClass =
+            q.difficulty === 'Easy' ? 'bg-success' :
+            q.difficulty === 'Medium' ? 'bg-warning text-dark' : 'bg-danger';
+
+        const typeClass =
+            q.type === 'Fill in the Blanks' ? 'bg-primary' :
+            q.type === 'True/False' ? 'bg-info' : 'bg-purple';
+
+        const categoryClass =
+            q.category === 'A' ? 'bg-primary' :
+            q.category === 'B' ? 'bg-info' : 'bg-danger';
+
+        // Helper to map category/type codes to full names for display
+        const getCategoryFullName = (categoryCode) => {
+            switch(categoryCode) {
+                case 'A': return 'General Knowledge';
+                case 'B': return 'Science & Technology';
+                case 'C': return 'History & Culture';
+                default: return categoryCode;
+            }
+        };
+
+        li.innerHTML = `
+            <div class="ms-2 me-auto">
+                <div class="fw-bold">${index + 1}. ${q.question}</div>
+                <div class="mt-2 d-flex flex-wrap gap-1">
+                    <span class="badge ${difficultyClass} difficulty-badge">${q.difficulty}</span>
+                    <span class="badge ${typeClass} type-badge">${q.type}</span>
+                    <span class="badge bg-secondary category-badge">${getCategoryFullName(q.category)}</span>
+                </div>
+            </div>
+            <span class="badge ${categoryClass} rounded-pill">${q.category}</span>
+        `;
+        questionsList.appendChild(li);
+    });
+
+    // Show results section
+    resultsContainer.classList.remove('d-none');
+
+    // Scroll to results
+    resultsContainer.scrollIntoView({ behavior: 'smooth' });
+}
   </script>
 </body>
 </html>

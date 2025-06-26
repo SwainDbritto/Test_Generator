@@ -94,37 +94,44 @@ def generate_test():
         pool = df_questions.to_dict('records')
         random.shuffle(pool)
 
-        # Multi-pass selection strategy
-        for strict_mode in [True, False]:
+        # Priority-based selection strategy
+        for priority_level in [3, 2, 1]:
             for q in pool:
                 if q in selected:
                     continue
                     
-                # Check if question fits remaining quotas
+                # Check remaining quotas
                 fits_category = remaining['category'][q['category']] > 0
                 fits_diff = remaining['difficulty'][q['difficulty']] > 0
                 fits_type = remaining['type'][q['type']] > 0
                 
-                # In strict mode, require all quotas to fit
-                if strict_mode and not (fits_category and fits_diff and fits_type):
-                    continue
-                # In relaxed mode, require at least one quota to fit
-                elif not strict_mode and not (fits_category or fits_diff or fits_type):
-                    continue
+                # Priority level checks
+                if priority_level == 3:  # All three must match
+                    if not (fits_category and fits_diff and fits_type):
+                        continue
+                elif priority_level == 2:  # Any two must match
+                    if not ((fits_category and fits_diff) or 
+                           (fits_category and fits_type) or 
+                           (fits_diff and fits_type)):
+                        continue
+                else:  # priority_level == 1 - Any one must match
+                    if not (fits_category or fits_diff or fits_type):
+                        continue
                 
                 # Add question and decrement quotas
                 selected.append(q)
-                remaining['category'][q['category']] -= 1
-                remaining['difficulty'][q['difficulty']] -= 1
-                remaining['type'][q['type']] -= 1
+                if fits_category:
+                    remaining['category'][q['category']] -= 1
+                if fits_diff:
+                    remaining['difficulty'][q['difficulty']] -= 1
+                if fits_type:
+                    remaining['type'][q['type']] -= 1
                 
                 if len(selected) >= total:
                     break
                     
             if len(selected) >= total:
-                break
-
-        # Prepare response with standardized data
+                break        # Prepare response with standardized data
         response = [{
             'id': q['id'],
             'question': q['question'],
@@ -141,3 +148,4 @@ def generate_test():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+    
