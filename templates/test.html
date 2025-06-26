@@ -729,7 +729,7 @@
             }
 
             const questions = await response.json(); // The backend should return the generated list of questions
-
+            console.log("API Response:", questions);  // <<-- ADD THIS LINE
             // Display results
             displayResults(questions, catA, catB, catC, easy, medium, hard);
 

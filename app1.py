@@ -1,118 +1,143 @@
 from flask import Flask, request, jsonify, render_template
-from flask_cors import CORS # Ensure this is imported
+from flask_cors import CORS
 import pandas as pd
 import random
 import os
 
 app = Flask(__name__)
-# app.secret_key = 'your_secret_key' # Uncomment and set if you use sessions
+CORS(app)  # Enable CORS for all routes during development
 
-# --- Configuration ---
+# Configuration
 CSV_FILE_PATH = 'questions.csv'
 df_questions = pd.DataFrame()
 
-# --- IMPORTANT CORS FIX ---
-# Explicitly allow both localhost and 127.0.0.1 on port 5000
-# for all routes under '/api/'.
-# If you are running your frontend via something like Python's http.server on port 8000,
-# you would add 'http://127.0.0.1:8000' or 'http://localhost:8000' here as well.
-CORS(app, resources={r"/api/*": {"origins": ["http://127.0.0.1:5000", "http://localhost:5000"]}})
-
-# --- Data Loading Function ---
 def load_questions_from_csv():
+    """Load questions from CSV with robust error handling"""
     global df_questions
-    if not os.path.exists(CSV_FILE_PATH):
-        print(f"Error: CSV file not found at {CSV_FILE_PATH}. Please ensure it's in the correct directory.")
-        return False
     try:
-        df_questions = pd.read_csv(CSV_FILE_PATH)
-        df_questions['category'] = df_questions['category'].astype(str)
-        df_questions['difficulty'] = df_questions['difficulty'].astype(str)
-        df_questions['type'] = df_questions['type'].astype(str)
-        print(f"Successfully loaded {len(df_questions)} questions from {CSV_FILE_PATH}")
+        if not os.path.exists(CSV_FILE_PATH):
+            raise FileNotFoundError(f"CSV file not found at {CSV_FILE_PATH}")
+        
+        df = pd.read_csv(CSV_FILE_PATH)
+        
+        # Validate required columns
+        required_columns = ['id', 'question', 'category', 'difficulty', 'type']
+        if not all(col in df.columns for col in required_columns):
+            missing = [col for col in required_columns if col not in df.columns]
+            raise ValueError(f"Missing required columns: {missing}")
+        
+        # Clean and standardize data
+        df['category'] = df['category'].astype(str).str.upper().str.strip()
+        df['difficulty'] = df['difficulty'].astype(str).str.capitalize().str.strip()
+        df['type'] = df['type'].astype(str).str.strip()
+        
+        # Validate values
+        valid_difficulties = ['Easy', 'Medium', 'Hard']
+        invalid_diffs = df[~df['difficulty'].isin(valid_difficulties)]
+        if not invalid_diffs.empty:
+            raise ValueError(f"Invalid difficulty values: {invalid_diffs['difficulty'].unique()}")
+        
+        df_questions = df
+        print(f"Successfully loaded {len(df)} questions")
         return True
+        
     except Exception as e:
-        print(f"An error occurred while loading the CSV: {e}")
-        df_questions = pd.DataFrame()
+        print(f"Error loading CSV: {str(e)}")
+        df_questions = pd.DataFrame(columns=required_columns)
         return False
 
+# Load questions when starting
 if not load_questions_from_csv():
-    print("Application started with no questions loaded. Please fix CSV path/errors.")
+    print("Warning: Starting with empty question bank")
 
-# --- Existing Frontend Serving Routes ---
 @app.route('/')
-def Index():
+def index():
     return render_template('index.html')
 
 @app.route('/test.html')
 def test():
     return render_template('test.html')
 
-# --- Backend API Endpoint for Test Generation ---
 @app.route('/api/generate-test', methods=['POST'])
 def generate_test():
-    if df_questions.empty:
-        return jsonify({"message": "Backend has no questions loaded. Check server logs."}), 500
+    """Generate test with proper quota enforcement"""
+    try:
+        if df_questions.empty:
+            return jsonify({"error": "No questions available"}), 503
 
-    data = request.get_json()
+        data = request.get_json()
+        
+        # Validate input
+        required_fields = ['total_questions', 'category_counts', 
+                         'difficulty_counts', 'type_counts']
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Missing required parameters"}), 400
 
-    total_questions = data.get('total_questions')
-    category_counts = data.get('category_counts', {})
-    difficulty_counts = data.get('difficulty_counts', {})
-    type_counts = data.get('type_counts', {})
+        total = data['total_questions']
+        cat_counts = data['category_counts']
+        diff_counts = data['difficulty_counts']
+        type_counts = data['type_counts']
 
-    if not all([total_questions is not None, category_counts, difficulty_counts, type_counts]):
-        return jsonify({"message": "Missing one or more required parameters (total_questions, category_counts, difficulty_counts, type_counts)."}), 400
+        # Verify quota sums match total
+        if (sum(cat_counts.values()) != total or 
+            sum(diff_counts.values()) != total or
+            sum(type_counts.values()) != total):
+            return jsonify({"error": "Quota sums must match total questions"}), 400
 
-    if sum(category_counts.values()) != total_questions or \
-       sum(difficulty_counts.values()) != total_questions or \
-       sum(type_counts.values()) != total_questions:
-        return jsonify({"message": "Sum of counts for categories, difficulties, or types does not match total_questions."}), 400
+        # Initialize selection process
+        selected = []
+        remaining = {
+            'category': cat_counts.copy(),
+            'difficulty': diff_counts.copy(),
+            'type': type_counts.copy()
+        }
+        pool = df_questions.to_dict('records')
+        random.shuffle(pool)
 
-    selected_questions = []
-    remaining_category = category_counts.copy()
-    remaining_difficulty = difficulty_counts.copy()
-    remaining_type = type_counts.copy()
-
-    shuffled_questions = df_questions.to_dict(orient='records')
-    random.shuffle(shuffled_questions)
-
-    # --- STEP 1: STRICTLY FILL CATEGORIES FIRST ---
-    category_based_selection = []
-    for question in shuffled_questions:
-        if remaining_category[question['category']] > 0:
-            category_based_selection.append(question)
-            remaining_category[question['category']] -= 1
-            if sum(remaining_category.values()) == 0:
-                break  # Stop once all categories are filled
-
-    # --- STEP 2: NOW FILTER FOR DIFFICULTY/TYPE ---
-    for question in category_based_selection:
-        if (remaining_difficulty[question['difficulty']] > 0 and
-            remaining_type[question['type']] > 0):
-            
-            selected_questions.append(question)
-            remaining_difficulty[question['difficulty']] -= 1
-            remaining_type[question['type']] -= 1
-
-    # --- STEP 3: IF MISSING QUESTIONS, RELAX DIFFICULTY/TYPE ---
-    if len(selected_questions) < total_questions:
-        for question in category_based_selection:
-            if question not in selected_questions:
-                if (remaining_difficulty[question['difficulty']] > 0 or
-                    remaining_type[question['type']] > 0):
+        # Multi-pass selection strategy
+        for strict_mode in [True, False]:
+            for q in pool:
+                if q in selected:
+                    continue
                     
-                    selected_questions.append(question)
-                    remaining_difficulty[question['difficulty']] -= 1
-                    remaining_type[question['type']] -= 1
+                # Check if question fits remaining quotas
+                fits_category = remaining['category'][q['category']] > 0
+                fits_diff = remaining['difficulty'][q['difficulty']] > 0
+                fits_type = remaining['type'][q['type']] > 0
+                
+                # In strict mode, require all quotas to fit
+                if strict_mode and not (fits_category and fits_diff and fits_type):
+                    continue
+                # In relaxed mode, require at least one quota to fit
+                elif not strict_mode and not (fits_category or fits_diff or fits_type):
+                    continue
+                
+                # Add question and decrement quotas
+                selected.append(q)
+                remaining['category'][q['category']] -= 1
+                remaining['difficulty'][q['difficulty']] -= 1
+                remaining['type'][q['type']] -= 1
+                
+                if len(selected) >= total:
+                    break
+                    
+            if len(selected) >= total:
+                break
 
-    # --- FINAL CHECK ---
-    if len(selected_questions) < total_questions:
-        print(f"Warning: Only {len(selected_questions)}/{total_questions} selected. Check CSV data.")
+        # Prepare response with standardized data
+        response = [{
+            'id': q['id'],
+            'question': q['question'],
+            'category': q['category'],
+            'difficulty': q['difficulty'],
+            'type': q['type']
+        } for q in selected]
 
-    return jsonify(selected_questions)
+        return jsonify(response)
 
-# --- Run the Flask app ---
+    except Exception as e:
+        print(f"Error generating test: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
-
+    app.run(host='0.0.0.0', port=5000, debug=True)
