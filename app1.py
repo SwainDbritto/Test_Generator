@@ -201,7 +201,6 @@ def generate_test():
                         f"Provided {act_count} instead of {req_count} "
                         f"{q_type} type questions"
                     )
-
         # Prepare response
         response = {
             'test': [{
@@ -213,7 +212,7 @@ def generate_test():
             } for q in selected],
             'messages': messages
         }
-
+        
         return jsonify(response)
 
     except Exception as e:

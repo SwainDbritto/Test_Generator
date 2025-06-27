@@ -506,9 +506,9 @@
                 </div>
               </div>
               <div class="d-flex gap-2">
-                <span class="badge bg-primary distro-badge">A:7</span>
-                <span class="badge bg-info distro-badge">B:7</span>
-                <span class="badge bg-danger distro-badge">C:6</span>
+                <span class="badge bg-primary distro-badge" id="badgeA">A:7</span>
+                <span class="badge bg-info distro-badge" id="badgeB">B:7</span>
+                <span class="badge bg-danger distro-badge" id="badgeC">C:6</span>
               </div>
             </div>
           </div>
@@ -586,6 +586,7 @@
         totalSlider.addEventListener('input', function() {
             totalQuestionsInput.value = this.value;
             document.getElementById('totalQuestionsValue').textContent = this.value;
+            console.log("hello")
         });
 
         totalQuestionsInput.addEventListener('change', function() {
@@ -730,17 +731,34 @@ function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
     const questions = responseData.test || [];
     const messages = responseData.messages || [];
     
+    const actualCatA = questions.filter(q => q.category === 'A').length
+    const actualCatB = questions.filter(q => q.category === 'B').length
+    const actualCatC = questions.filter(q => q.category === 'C').length
+
+    const actualEasy = questions.filter(q => q.difficulty === 'Easy').length
+    const actualMedium = questions.filter(q => q.difficulty === 'Medium').length
+    const actualHard = questions.filter(q => q.difficulty === 'Hard').length
+
     // Update summary
     document.getElementById('summaryTotal').textContent = questions.length;
-    document.getElementById('summaryCatA').textContent = catA;
-    document.getElementById('summaryCatB').textContent = catB;
-    document.getElementById('summaryCatC').textContent = catC;
-    document.getElementById('summaryEasy').textContent = easy;
-    document.getElementById('summaryMedium').textContent = medium;
-    document.getElementById('summaryHard').textContent = hard;
-
+    document.getElementById('summaryCatA').textContent = actualCatA;
+    document.getElementById('summaryCatB').textContent = actualCatA;
+    document.getElementById('summaryCatC').textContent = actualCatC;
+    document.getElementById('summaryEasy').textContent = actualEasy;
+    document.getElementById('summaryMedium').textContent = actualMedium;
+    document.getElementById('summaryHard').textContent = actualHard;
+    document.getElementById('badgeA').textContent = `A:${actualCatA}`
+    document.getElementById('badgeB').textContent = `B:${actualCatB}`
+    document.getElementById('badgeC').textContent = `C:${actualCatC}`
+    
     // Clear previous questions
     questionsList.innerHTML = '';
+    
+    const existingAlert = document.querySelector('#resultsContainer .alert.alert-warning')
+    if(existingAlert){
+      existingAlert.remove()
+      console.log('hello')
+    }
 
     // Handle empty results
     if (questions.length === 0) {
@@ -780,7 +798,7 @@ function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
 
         li.innerHTML = `
             <div class="ms-2 me-auto">
-                <div class="fw-bold">${index + 1}. ${q.question}</div>
+                <div class="fw-bold">${q.question}</div>
                 <div class="mt-2 d-flex flex-wrap gap-1">
                     <span class="badge ${difficultyClass} difficulty-badge">${q.difficulty}</span>
                     <span class="badge ${typeClass} type-badge">${q.type}</span>
