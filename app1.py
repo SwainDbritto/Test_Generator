@@ -3,6 +3,11 @@ from flask_cors import CORS
 import pandas as pd
 import random
 import os
+from collections import defaultdict
+
+category_counts = defaultdict(int)
+difficulty_counts = defaultdict(int)
+type_counts = defaultdict(int)
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes during development
@@ -58,9 +63,10 @@ def index():
 def test():
     return render_template('test.html')
 
+# Add to your existing Flask app
 @app.route('/api/generate-test', methods=['POST'])
 def generate_test():
-    """Generate test with proper quota enforcement"""
+    """Generate test with quota enforcement and deviation reporting"""
     try:
         if df_questions.empty:
             return jsonify({"error": "No questions available"}), 503
@@ -74,51 +80,61 @@ def generate_test():
             return jsonify({"error": "Missing required parameters"}), 400
 
         total = data['total_questions']
-        cat_counts = data['category_counts']
-        diff_counts = data['difficulty_counts']
-        type_counts = data['type_counts']
+        requested_cats = data['category_counts']
+        requested_diffs = data['difficulty_counts']
+        requested_types = data['type_counts']
 
         # Verify quota sums match total
-        if (sum(cat_counts.values()) != total or 
-            sum(diff_counts.values()) != total or
-            sum(type_counts.values()) != total):
+        if (sum(requested_cats.values()) != total or 
+            sum(requested_diffs.values()) != total or
+            sum(requested_types.values()) != total):
             return jsonify({"error": "Quota sums must match total questions"}), 400
 
         # Initialize selection process
         selected = []
         remaining = {
-            'category': cat_counts.copy(),
-            'difficulty': diff_counts.copy(),
-            'type': type_counts.copy()
+            'category': requested_cats.copy(),
+            'difficulty': requested_diffs.copy(),
+            'type': requested_types.copy()
         }
         pool = df_questions.to_dict('records')
         random.shuffle(pool)
 
-        # Priority-based selection strategy
+        # Track actual counts
+        actual_counts = {
+            'category': defaultdict(int),
+            'difficulty': defaultdict(int),
+            'type': defaultdict(int)
+        }
+        
+        # Priority-based selection
         for priority_level in [3, 2, 1]:
             for q in pool:
                 if q in selected:
                     continue
                     
-                # Check remaining quotas
-                fits_category = remaining['category'][q['category']] > 0
-                fits_diff = remaining['difficulty'][q['difficulty']] > 0
-                fits_type = remaining['type'][q['type']] > 0
+                # Check if category exists in remaining
+                cat_exists = q['category'] in remaining['category']
+                diff_exists = q['difficulty'] in remaining['difficulty']
+                type_exists = q['type'] in remaining['type']
                 
-                # Priority level checks
-                if priority_level == 3:  # All three must match
+                fits_category = cat_exists and remaining['category'][q['category']] > 0
+                fits_diff = diff_exists and remaining['difficulty'][q['difficulty']] > 0
+                fits_type = type_exists and remaining['type'][q['type']] > 0
+                
+                # Priority checks
+                if priority_level == 3:
                     if not (fits_category and fits_diff and fits_type):
                         continue
-                elif priority_level == 2:  # Any two must match
+                elif priority_level == 2:
                     if not ((fits_category and fits_diff) or 
                            (fits_category and fits_type) or 
                            (fits_diff and fits_type)):
                         continue
-                else:  # priority_level == 1 - Any one must match
+                else:  # priority_level == 1
                     if not (fits_category or fits_diff or fits_type):
                         continue
                 
-                # Add question and decrement quotas
                 selected.append(q)
                 if fits_category:
                     remaining['category'][q['category']] -= 1
@@ -127,25 +143,82 @@ def generate_test():
                 if fits_type:
                     remaining['type'][q['type']] -= 1
                 
+                # Update actual counts
+                actual_counts['category'][q['category']] += 1
+                actual_counts['difficulty'][q['difficulty']] += 1
+                actual_counts['type'][q['type']] += 1
+                
                 if len(selected) >= total:
                     break
                     
             if len(selected) >= total:
-                break        # Prepare response with standardized data
-        response = [{
-            'id': q['id'],
-            'question': q['question'],
-            'category': q['category'],
-            'difficulty': q['difficulty'],
-            'type': q['type']
-        } for q in selected]
+                break
+
+        # Generate deviation messages
+        messages = []
+        
+        # Category deviations
+        for cat, req_count in requested_cats.items():
+            act_count = actual_counts['category'].get(cat, 0)
+            if act_count != req_count:
+                if act_count < req_count:
+                    messages.append(
+                        f"Could only provide {act_count} out of {req_count} "
+                        f"{cat} category questions"
+                    )
+                else:
+                    messages.append(
+                        f"Provided {act_count} instead of {req_count} "
+                        f"{cat} category questions"
+                    )
+        
+        # Difficulty deviations
+        for diff, req_count in requested_diffs.items():
+            act_count = actual_counts['difficulty'].get(diff, 0)
+            if act_count != req_count:
+                if act_count < req_count:
+                    messages.append(
+                        f"Could only provide {act_count} out of {req_count} "
+                        f"{diff} difficulty questions"
+                    )
+                else:
+                    messages.append(
+                        f"Provided {act_count} instead of {req_count} "
+                        f"{diff} difficulty questions"
+                    )
+        
+        # Type deviations
+        for q_type, req_count in requested_types.items():
+            act_count = actual_counts['type'].get(q_type, 0)
+            if act_count != req_count:
+                if act_count < req_count:
+                    messages.append(
+                        f"Could only provide {act_count} out of {req_count} "
+                        f"{q_type} type questions"
+                    )
+                else:
+                    messages.append(
+                        f"Provided {act_count} instead of {req_count} "
+                        f"{q_type} type questions"
+                    )
+
+        # Prepare response
+        response = {
+            'test': [{
+                'id': q['id'],
+                'question': q['question'],
+                'category': q['category'],
+                'difficulty': q['difficulty'],
+                'type': q['type']
+            } for q in selected],
+            'messages': messages
+        }
 
         return jsonify(response)
 
     except Exception as e:
         print(f"Error generating test: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
     
