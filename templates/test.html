@@ -791,19 +791,19 @@ function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
         `;
         questionsList.appendChild(li);
     });
-        li.innerHTML = `
-            <div class="ms-2 me-auto">
-                <div class="fw-bold">${index + 1}. ${q.question}</div>
-                <div class="mt-2 d-flex flex-wrap gap-1">
-                    <span class="badge ${difficultyClass} difficulty-badge">${q.difficulty}</span>
-                    <span class="badge ${typeClass} type-badge">${q.type}</span>
-                    <span class="badge bg-secondary category-badge">${getCategoryFullName(q.category)}</span>
-                </div>
-            </div>
-            <span class="badge ${categoryClass} rounded-pill">${q.category}</span>
-        `;
-        questionsList.appendChild(li);
-    });
+    //     li.innerHTML = `
+    //         <div class="ms-2 me-auto">
+    //             <div class="fw-bold">${index + 1}. ${q.question}</div>
+    //             <div class="mt-2 d-flex flex-wrap gap-1">
+    //                 <span class="badge ${difficultyClass} difficulty-badge">${q.difficulty}</span>
+    //                 <span class="badge ${typeClass} type-badge">${q.type}</span>
+    //                 <span class="badge bg-secondary category-badge">${getCategoryFullName(q.category)}</span>
+    //             </div>
+    //         </div>
+    //         <span class="badge ${categoryClass} rounded-pill">${q.category}</span>
+    //     `;
+    //     questionsList.appendChild(li);
+    // });
 
     // Show deviation messages
     if (messages.length > 0) {
