@@ -668,158 +668,149 @@
     }
 
     // Generate test - MODIFIED TO MAKE API CALL
-    async function generateTest() {
-        if (!validateInputs()) return;
+async function generateTest() {
+    if (!validateInputs()) return;
 
-        // Show loading state
-        const originalBtnText = generateBtn.innerHTML;
-        generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Generating...';
-        generateBtn.disabled = true;
+    // Show loading state
+    const originalBtnText = generateBtn.innerHTML;
+    generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Generating...';
+    generateBtn.disabled = true;
 
-        // Declare errorMessage here so it's accessible in the outer catch block
-        let errorMessage = '';
+    try {
+        const total = parseInt(totalQuestionsInput.value) || 0;
+        const catA = parseInt(catAInput.value) || 0;
+        const catB = parseInt(catBInput.value) || 0;
+        const catC = parseInt(catCInput.value) || 0;
 
-        try {
-            const total = parseInt(totalQuestionsInput.value) || 0;
-            const catA = parseInt(catAInput.value) || 0;
-            const catB = parseInt(catBInput.value) || 0;
-            const catC = parseInt(catCInput.value) || 0;
+        const easy = parseInt(easyInput.value) || 0;
+        const medium = parseInt(mediumInput.value) || 0;
+        const hard = parseInt(hardInput.value) || 0;
 
-            const easy = parseInt(easyInput.value) || 0;
-            const medium = parseInt(mediumInput.value) || 0;
-            const hard = parseInt(hardInput.value) || 0;
+        const fib = parseInt(fibInput.value) || 0;
+        const tf = parseInt(tfInput.value) || 0;
+        const qa = parseInt(qaInput.value) || 0;
 
-            const fib = parseInt(fibInput.value) || 0;
-            const tf = parseInt(tfInput.value) || 0;
-            const qa = parseInt(qaInput.value) || 0;
-
-            // --- NEW: Construct the request body for your backend ---
-            // This object will be sent as JSON to your Python Flask backend.
-            const requestBody = {
-                total_questions: total,
-                category_counts: { A: catA, B: catB, C: catC },
-                difficulty_counts: { Easy: easy, Medium: medium, Hard: hard },
-                // Ensure these type names exactly match what your Python backend expects
-                // based on the 'type' column in your CSV.
-                type_counts: { 'Fill in the Blanks': fib, 'True/False': tf, 'Question Answer': qa }
-            };
-
-            // --- NEW: Make the API call to your Python backend ---
-            const response = await fetch(`${API_BASE_URL}/generate-test`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody),
-            });
-
-            if (!response.ok) {
-                // Attempt to parse error message from backend
-                errorMessage = `HTTP error! Status: ${response.status}`;
-                try {
-                    const errorData = await response.json();
-                    if (errorData && errorData.message) {
-                        errorMessage = errorData.message;
-                    }
-                } catch (jsonError) {
-                    // If response is not JSON, use default error message
-                    console.warn("Backend error response was not JSON:", jsonError);
-                }
-                throw new Error(errorMessage); // Throw the error to be caught by the outer catch
+        // Construct request body
+        const requestBody = {
+            total_questions: total,
+            category_counts: { A: catA, B: catB, C: catC },
+            difficulty_counts: { Easy: easy, Medium: medium, Hard: hard },
+            type_counts: { 
+                'Fill in the Blanks': fib, 
+                'True/False': tf, 
+                'Question Answer': qa 
             }
+        };
 
-            const questions = await response.json(); // The backend should return the generated list of questions
-            console.log("API Response:", questions);  // <<-- ADD THIS LINE
-            // Display results
-            displayResults(questions, catA, catB, catC, easy, medium, hard);
-
-        } catch (error) {
-            console.error("Error generating test:", error);
-            // MODIFIED: Ensure error.message is used for network-level errors
-            const displayMessage = error.message || "Unknown network or backend issue.";
-            showAlert("Generation Error", `Failed to generate test: ${displayMessage}. Please check your backend is running and accessible.`);
-        } finally {
-            // Reset button state
-            generateBtn.innerHTML = originalBtnText;
-            generateBtn.disabled = false;
-        }
-    }
-
-    // --- ERASE THIS FUNCTION: It's no longer needed as the backend handles question generation ---
-    // function generateSampleQuestions(total, catA, catB, catC, easy, medium, hard, fib, tf, qa) {
-    //     // ... (all the logic for generating sample questions) ...
-    // }
-
-    // Display results (minor modifications to badge display for type and category names)
-    function displayResults(questions, catA, catB, catC, easy, medium, hard) {
-        // Update summary - these values represent what was *requested*,
-        // not necessarily what was *returned* if backend couldn't fulfill exactly.
-        document.getElementById('summaryTotal').textContent = questions.length; // Use actual returned length
-        document.getElementById('summaryCatA').textContent = catA;
-        document.getElementById('summaryCatB').textContent = catB;
-        document.getElementById('summaryCatC').textContent = catC;
-        document.getElementById('summaryEasy').textContent = easy;
-        document.getElementById('summaryMedium').textContent = medium;
-        document.getElementById('summaryHard').textContent = hard;
-
-        // Render questions
-        questionsList.innerHTML = '';
-        if (questions.length === 0) {
-            questionsList.innerHTML = '<li class="list-group-item">No questions found matching the criteria.</li>';
-            resultsContainer.classList.remove('d-none');
-            resultsContainer.scrollIntoView({ behavior: 'smooth' });
-            return;
-        }
-
-        questions.forEach((q, index) => {
-            const li = document.createElement('li');
-            li.className = 'list-group-item d-flex justify-content-between align-items-start question-item';
-
-            // Determine badge classes based on actual data from backend
-            // Ensure these strings match the 'difficulty', 'type', and 'category' values in your CSV
-            const difficultyClass =
-                q.difficulty === 'Easy' ? 'bg-success' :
-                q.difficulty === 'Medium' ? 'bg-warning text-dark' : 'bg-danger';
-
-            // Use the 'type' value directly from the backend, which comes from the CSV
-            const typeClass =
-                q.type === 'Fill in the Blanks' ? 'bg-primary' :
-                q.type === 'True/False' ? 'bg-info' : 'bg-purple'; // Assuming 'bg-purple' is defined in your CSS
-
-            const categoryClass =
-                q.category === 'A' ? 'bg-primary' :
-                q.category === 'B' ? 'bg-info' : 'bg-danger';
-
-            // Helper to map category/type codes to full names for display
-            const getCategoryFullName = (categoryCode) => {
-                switch(categoryCode) {
-                    case 'A': return 'General Knowledge';
-                    case 'B': return 'Science & Technology';
-                    case 'C': return 'History & Culture';
-                    default: return categoryCode;
-                }
-            };
-
-            li.innerHTML = `
-                <div class="ms-2 me-auto">
-                    <div class="fw-bold">${index + 1}. ${q.question}</div>
-                    <div class="mt-2 d-flex flex-wrap gap-1">
-                        <span class="badge ${difficultyClass} difficulty-badge">${q.difficulty}</span>
-                        <span class="badge ${typeClass} type-badge">${q.type}</span>
-                        <span class="badge bg-secondary category-badge">${getCategoryFullName(q.category)}</span>
-                    </div>
-                </div>
-                <span class="badge ${categoryClass} rounded-pill">${q.category}</span>
-            `;
-            questionsList.appendChild(li);
+        // API call
+        const response = await fetch(`${API_BASE_URL}/generate-test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
         });
 
-        // Show results section
-        resultsContainer.classList.remove('d-none');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+        }
 
-        // Scroll to results
-        resultsContainer.scrollIntoView({ behavior: 'smooth' });
+        const responseData = await response.json();
+        displayResults(responseData, catA, catB, catC, easy, medium, hard);
+
+    } catch (error) {
+        console.error("Error generating test:", error);
+        showAlert("Generation Error", error.message);
+    } finally {
+        generateBtn.innerHTML = originalBtnText;
+        generateBtn.disabled = false;
     }
+}
+
+function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
+    const questions = responseData.test || [];
+    const messages = responseData.messages || [];
+    
+    // Update summary
+    document.getElementById('summaryTotal').textContent = questions.length;
+    document.getElementById('summaryCatA').textContent = catA;
+    document.getElementById('summaryCatB').textContent = catB;
+    document.getElementById('summaryCatC').textContent = catC;
+    document.getElementById('summaryEasy').textContent = easy;
+    document.getElementById('summaryMedium').textContent = medium;
+    document.getElementById('summaryHard').textContent = hard;
+
+    // Clear previous questions
+    questionsList.innerHTML = '';
+
+    // Handle empty results
+    if (questions.length === 0) {
+        questionsList.innerHTML = '<li class="list-group-item">No questions found matching the criteria.</li>';
+        resultsContainer.classList.remove('d-none');
+        resultsContainer.scrollIntoView({ behavior: 'smooth' });
+        return;
+    }
+
+    // Render questions
+    questions.forEach((q, index) => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-start question-item';
+
+        // Badge classes
+        const difficultyClass = 
+            q.difficulty === 'Easy' ? 'bg-success' :
+            q.difficulty === 'Medium' ? 'bg-warning text-dark' : 'bg-danger';
+        
+        const typeClass = 
+            q.type === 'Fill in the Blanks' ? 'bg-primary' :
+            q.type === 'True/False' ? 'bg-info' : 'bg-purple';
+        
+        const categoryClass = 
+            q.category === 'A' ? 'bg-primary' :
+            q.category === 'B' ? 'bg-info' : 'bg-danger';
+
+        // Category name mapping
+        const getCategoryFullName = (categoryCode) => {
+            switch(categoryCode) {
+                case 'A': return 'General Knowledge';
+                case 'B': return 'Science & Technology';
+                case 'C': return 'History & Culture';
+                default: return categoryCode;
+            }
+        };
+
+        li.innerHTML = `
+            <div class="ms-2 me-auto">
+                <div class="fw-bold">${index + 1}. ${q.question}</div>
+                <div class="mt-2 d-flex flex-wrap gap-1">
+                    <span class="badge ${difficultyClass} difficulty-badge">${q.difficulty}</span>
+                    <span class="badge ${typeClass} type-badge">${q.type}</span>
+                    <span class="badge bg-secondary category-badge">${getCategoryFullName(q.category)}</span>
+                </div>
+            </div>
+            <span class="badge ${categoryClass} rounded-pill">${q.category}</span>
+        `;
+        questionsList.appendChild(li);
+    });
+
+    // Show deviation messages
+    if (messages.length > 0) {
+        const alertBox = document.createElement('div');
+        alertBox.className = 'alert alert-warning mt-4';
+        alertBox.innerHTML = `
+            <h5 class="alert-heading d-flex align-items-center">
+                <i class="bi bi-info-circle me-2"></i>Test Adjustments
+            </h5>
+            <ul class="mb-0">
+                ${messages.map(m => `<li>${m}</li>`).join('')}
+            </ul>
+        `;
+        document.querySelector('#resultsContainer .card-body').prepend(alertBox);
+    }
+
+    // Show results
+    resultsContainer.classList.remove('d-none');
+    resultsContainer.scrollIntoView({ behavior: 'smooth' });
+}
   </script>
 </body>
 </html>
