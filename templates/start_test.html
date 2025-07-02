@@ -592,12 +592,16 @@
 
             questionHTML += '</div></div>';
             container.innerHTML = questionHTML;
-            updateQuestionDots();
+            updateQuestionDot();
             updateQuestionCounter();
             updateProgress();
         }
         
         function updateQuestionDot(index) {
+            if (index < 0 || index >= questions.length) {
+                console.error(`Invalid index: ${index}. Questions array length: ${questions.length}`);
+                return; // Exit early
+            }
             const dots = document.querySelectorAll('.question-dot');
             const questionId = questions[index].id;
             
