@@ -186,6 +186,7 @@
       font-size: 0.9rem;
       color: #6c757d;
     }
+    
   </style>
 </head>
 <body>
@@ -527,9 +528,11 @@
           <button class="btn export-btn">
             <i class="bi bi-file-earmark-pdf me-2"></i>Export as PDF
           </button>
-          <button class="btn start-btn">
-            <i class="bi bi-play-circle me-2"></i>Start Test
-          </button>
+          <a href="start_test.html">
+            <button class="btn start-btn">
+              <i class="bi bi-play-circle me-2"></i>Start Test
+            </button>
+          </a>
         </div>
       </div>
     </div>
@@ -742,7 +745,7 @@ function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
     // Update summary
     document.getElementById('summaryTotal').textContent = questions.length;
     document.getElementById('summaryCatA').textContent = actualCatA;
-    document.getElementById('summaryCatB').textContent = actualCatA;
+    document.getElementById('summaryCatB').textContent = actualCatB;
     document.getElementById('summaryCatC').textContent = actualCatC;
     document.getElementById('summaryEasy').textContent = actualEasy;
     document.getElementById('summaryMedium').textContent = actualMedium;
@@ -837,7 +840,11 @@ function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
         `;
         document.querySelector('#resultsContainer .card-body').prepend(alertBox);
     }
-
+    const reset = responseData.resetMessages
+    
+    if(reset){
+      showAlert("Question Bank Exhausted",reset)
+    }
     // Show results
     resultsContainer.classList.remove('d-none');
     resultsContainer.scrollIntoView({ behavior: 'smooth' });

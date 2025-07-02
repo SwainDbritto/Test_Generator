@@ -1,16 +1,19 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template 
 from flask_cors import CORS
 import pandas as pd
 import random
 import os
 from collections import defaultdict
 
+app = Flask(__name__)
+app.secret_key = os.urandom(24).hex()
+
+# Critical CORS configuration update
+CORS(app)
 category_counts = defaultdict(int)
 difficulty_counts = defaultdict(int)
 type_counts = defaultdict(int)
-
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes during development
+used_question_id = []
 
 # Configuration
 CSV_FILE_PATH = 'questions.csv'
@@ -62,10 +65,17 @@ def index():
 @app.route('/test.html')
 def test():
     return render_template('test.html')
+@app.route('/start_test.html')
+def start_test():
+    return render_template('start_test.html')
 
 # Add to your existing Flask app
 @app.route('/api/generate-test', methods=['POST'])
 def generate_test():
+    all_questions = df_questions.to_dict('records')
+    questions_length = len(all_questions)
+    print(questions_length)
+    global used_question_id
     """Generate test with quota enforcement and deviation reporting"""
     try:
         if df_questions.empty:
@@ -83,7 +93,7 @@ def generate_test():
         requested_cats = data['category_counts']
         requested_diffs = data['difficulty_counts']
         requested_types = data['type_counts']
-
+        print(requested_cats.items())
         # Verify quota sums match total
         if (sum(requested_cats.values()) != total or 
             sum(requested_diffs.values()) != total or
@@ -97,9 +107,12 @@ def generate_test():
             'difficulty': requested_diffs.copy(),
             'type': requested_types.copy()
         }
-        pool = df_questions.to_dict('records')
-        random.shuffle(pool)
-
+        
+        unused_question_id = [q for q in df_questions.to_dict('records')
+                                if q['id'] not in used_question_id
+                            ]
+        random.shuffle(unused_question_id)
+        pool = unused_question_id
         # Track actual counts
         actual_counts = {
             'category': defaultdict(int),
@@ -108,7 +121,7 @@ def generate_test():
         }
         
         # Priority-based selection
-        for priority_level in [3, 2, 1]:
+        for priority_level in [3, 2, 1]:          
             for q in pool:
                 if q in selected:
                     continue
@@ -153,13 +166,24 @@ def generate_test():
                     
             if len(selected) >= total:
                 break
-
+        
+        new_ids = [q['id'] for q in selected]
+        used_question_id.extend(new_ids)
+        numbers_used = len(used_question_id)
+        print(len(used_question_id))
         # Generate deviation messages
         messages = []
-        
+        reset_message = None
+
+        if(numbers_used >= questions_length):
+            used_question_id = []
+            reset_message = "Question bank has been reset automatically for Next Generation as all questions were used."
+            print("🔄 Question pool reset")
+
         # Category deviations
         for cat, req_count in requested_cats.items():
             act_count = actual_counts['category'].get(cat, 0)
+            print(act_count)
             if act_count != req_count:
                 if act_count < req_count:
                     messages.append(
@@ -210,7 +234,8 @@ def generate_test():
                 'difficulty': q['difficulty'],
                 'type': q['type']
             } for q in selected],
-            'messages': messages
+            'messages': messages,
+            'resetMessages': reset_message
         }
         
         return jsonify(response)
@@ -218,6 +243,7 @@ def generate_test():
     except Exception as e:
         print(f"Error generating test: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
     
