@@ -776,6 +776,11 @@ function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
         const li = document.createElement('li');
         li.className = 'list-group-item d-flex justify-content-between align-items-start question-item';
 
+        // Add substituted class if this is a fallback question
+        if (q.is_fallback) {
+            li.classList.add('substituted-question');
+        }
+
         // Badge classes
         const difficultyClass = 
             q.difficulty === 'Easy' ? 'bg-success' :
@@ -812,21 +817,8 @@ function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
         `;
         questionsList.appendChild(li);
     });
-    //     li.innerHTML = `
-    //         <div class="ms-2 me-auto">
-    //             <div class="fw-bold">${index + 1}. ${q.question}</div>
-    //             <div class="mt-2 d-flex flex-wrap gap-1">
-    //                 <span class="badge ${difficultyClass} difficulty-badge">${q.difficulty}</span>
-    //                 <span class="badge ${typeClass} type-badge">${q.type}</span>
-    //                 <span class="badge bg-secondary category-badge">${getCategoryFullName(q.category)}</span>
-    //             </div>
-    //         </div>
-    //         <span class="badge ${categoryClass} rounded-pill">${q.category}</span>
-    //     `;
-    //     questionsList.appendChild(li);
-    // });
 
-    // Show deviation messages
+    // Show deviation messages if any exist
     if (messages.length > 0) {
         const alertBox = document.createElement('div');
         alertBox.className = 'alert alert-warning mt-4';
@@ -838,6 +830,7 @@ function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
                 ${messages.map(m => `<li>${m}</li>`).join('')}
             </ul>
         `;
+        // Insert after the summary alert
         document.querySelector('#resultsContainer .card-body').prepend(alertBox);
     }
     const reset = responseData.resetMessages
