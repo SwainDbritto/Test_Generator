@@ -15,7 +15,7 @@
       --success-gradient: linear-gradient(135deg, #4cc9f0, #4895ef);
       --warning-gradient: linear-gradient(135deg, #f72585, #b5179e);
       --dark-gradient: linear-gradient(135deg, #2b2d42, #1d1e2c);
-      --purple: #7209B7; /* Custom purple for type badge */
+      --purple: #7209B7;
     }
     
     body {
@@ -104,7 +104,7 @@
       padding: 0.3em 0.7em;
     }
 
-    .bg-purple { /* Custom class for 'bg-purple' type badge */
+    .bg-purple {
       background-color: var(--purple) !important;
     }
     
@@ -185,6 +185,18 @@
     .stats-label {
       font-size: 0.9rem;
       color: #6c757d;
+    }
+    
+    /* Test Interface Styles */
+    .test-container {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+    }
+    
+    .answer-btn {
+      margin: 5px;
+      min-width: 120px;
     }
   </style>
 </head>
@@ -527,7 +539,7 @@
           <button class="btn export-btn">
             <i class="bi bi-file-earmark-pdf me-2"></i>Export as PDF
           </button>
-          <button class="btn start-btn">
+          <button class="btn start-btn" id="startTestBtn">
             <i class="bi bi-play-circle me-2"></i>Start Test
           </button>
         </div>
@@ -554,8 +566,25 @@
   <script>
     // DOM Elements
     const totalQuestionsInput = document.getElementById('totalQuestions');
-    const totalSlider = document.getElementById('totalQuestionsSlider'); // Corrected ID from 'totalSlider' to 'totalQuestionsSlider'
+    const totalSlider = document.getElementById('totalQuestionsSlider');
     const generateBtn = document.getElementById('generateBtn');
+    const startTestBtn = document.getElementById('startTestBtn');
+
+    // Track used question IDs globally
+    let usedQuestionIds = new Set();
+    const TOTAL_QUESTION_BANK_SIZE = 102; // Total questions in bank
+    let testManager = null;
+
+    // Reset function
+    function resetQuestionBank() {
+      usedQuestionIds.clear();
+      if (testManager) {
+        testManager.resetBank();
+      }
+      localStorage.removeItem('questionStates');
+      console.log("Question bank has been reset");
+      showAlert("Bank Reset", "Question bank has been reset. All questions will be available again.");
+    }
 
     // Category inputs
     const catAInput = document.getElementById('catA');
@@ -576,108 +605,250 @@
     const questionsList = document.getElementById('questionsList');
     const errorAlert = document.getElementById('errorAlert');
 
-    // --- NEW: API Base URL ---
-    // IMPORTANT: Replace 'http://localhost:5000' with the actual URL of your Python Flask backend.
+    // API Base URL
     const API_BASE_URL = 'http://localhost:5000/api';
 
     // Initialize page
     document.addEventListener('DOMContentLoaded', function() {
-        // Sync slider and input
-        totalSlider.addEventListener('input', function() {
-            totalQuestionsInput.value = this.value;
-            document.getElementById('totalQuestionsValue').textContent = this.value;
-        });
+      // Set up reset button
+      const resetBtn = document.createElement('button');
+      // resetBtn.className = 'btn btn-outline-light btn-sm me-2';
+      // resetBtn.id = 'resetBankBtn';
+      // resetBtn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Reset Bank';
+      // document.querySelector('.navbar .d-flex').append(resetBtn);
+      
+      resetBtn.addEventListener('click', resetQuestionBank);
 
-        totalQuestionsInput.addEventListener('change', function() {
-            if (this.value > 50) this.value = 50;
-            if (this.value < 5) this.value = 5;
-            totalSlider.value = this.value; // Corrected: Setting slider value from input
-            document.getElementById('totalQuestionsValue').textContent = this.value;
-        });
+      // Sync slider and input
+      totalSlider.addEventListener('input', function() {
+        totalQuestionsInput.value = this.value;
+        document.getElementById('totalQuestionsValue').textContent = this.value;
+      });
 
-        // Generate button handler
-        generateBtn.addEventListener('click', generateTest);
+      totalQuestionsInput.addEventListener('change', function() {
+        if (this.value > 50) this.value = 50;
+        if (this.value < 5) this.value = 5;
+        totalSlider.value = this.value;
+        document.getElementById('totalQuestionsValue').textContent = this.value;
+      });
+
+      // Generate button handler
+      generateBtn.addEventListener('click', generateTest);
     });
 
-    // Show alert (remains unchanged)
     function showAlert(title, message) {
-        document.getElementById('alertTitle').textContent = title;
-        document.getElementById('alertMessage').textContent = message;
-        errorAlert.style.display = 'block';
-
-        // Auto hide after 5 seconds
-        setTimeout(closeAlert, 5000);
+      document.getElementById('alertTitle').textContent = title;
+      document.getElementById('alertMessage').textContent = message;
+      errorAlert.style.display = 'block';
+      setTimeout(closeAlert, 5000);
     }
 
-    // Close alert (remains unchanged)
     function closeAlert() {
-        errorAlert.style.display = 'none';
+      errorAlert.style.display = 'none';
     }
 
-    // Validate inputs (minor modification for category limits)
     function validateInputs() {
-        const total = parseInt(totalQuestionsInput.value) || 0;
-        const catA = parseInt(catAInput.value) || 0;
-        const catB = parseInt(catBInput.value) || 0;
-        const catC = parseInt(catCInput.value) || 0;
-        const categoryTotal = catA + catB + catC;
+      const total = parseInt(totalQuestionsInput.value) || 0;
+      const catA = parseInt(catAInput.value) || 0;
+      const catB = parseInt(catBInput.value) || 0;
+      const catC = parseInt(catCInput.value) || 0;
+      const categoryTotal = catA + catB + catC;
 
-        const easy = parseInt(easyInput.value) || 0;
-        const medium = parseInt(mediumInput.value) || 0;
-        const hard = parseInt(hardInput.value) || 0;
-        const difficultyTotal = easy + medium + hard;
+      const easy = parseInt(easyInput.value) || 0;
+      const medium = parseInt(mediumInput.value) || 0;
+      const hard = parseInt(hardInput.value) || 0;
+      const difficultyTotal = easy + medium + hard;
 
-        const fib = parseInt(fibInput.value) || 0;
-        const tf = parseInt(tfInput.value) || 0;
-        const qa = parseInt(qaInput.value) || 0;
-        const typeTotal = fib + tf + qa;
+      const fib = parseInt(fibInput.value) || 0;
+      const tf = parseInt(tfInput.value) || 0;
+      const qa = parseInt(qaInput.value) || 0;
+      const typeTotal = fib + tf + qa;
 
-        if (!(categoryTotal === total)) {
-            showAlert("Category Error", `Inequality in Category total (${categoryTotal}) and total questions (${total})`);
-            return false;
-        }
+      if (!(categoryTotal === total)) {
+        showAlert("Category Error", `Category total (${categoryTotal}) doesn't match total questions (${total})`);
+        return false;
+      }
 
-        if (!(difficultyTotal === total)) {
-            showAlert("Difficulty Error", `Inequality in Difficulty total (${difficultyTotal}) and total questions (${total})`);
-            return false;
-        }
+      if (!(difficultyTotal === total)) {
+        showAlert("Difficulty Error", `Difficulty total (${difficultyTotal}) doesn't match total questions (${total})`);
+        return false;
+      }
 
-        if (!(typeTotal === total)) {
-            showAlert("Type Error", `Inequality in Question type total (${typeTotal}) and total questions (${total})`);
-            return false;
-        }
+      if (!(typeTotal === total)) {
+        showAlert("Type Error", `Question type total (${typeTotal}) doesn't match total questions (${total})`);
+        return false;
+      }
 
-        // --- MODIFIED: Category Limits ---
-        // These limits should ideally be fetched from the backend or dynamically calculated
-        // based on the actual CSV data. For now, using approximate values based on
-        // the 100+ questions CSV provided earlier (approx. 33-34 questions per category).
-        // If your CSV changes, adjust these values or implement backend validation.
-        const MAX_AVAILABLE_CAT_A = 34;
-        const MAX_AVAILABLE_CAT_B = 33;
-        const MAX_AVAILABLE_CAT_C = 33;
-
-        if (catA > MAX_AVAILABLE_CAT_A || catB > MAX_AVAILABLE_CAT_B || catC > MAX_AVAILABLE_CAT_C) {
-            showAlert("Category Limit",
-                `One or more categories exceed available questions. Max for A: ${MAX_AVAILABLE_CAT_A}, B: ${MAX_AVAILABLE_CAT_B}, C: ${MAX_AVAILABLE_CAT_C}.`);
-            return false;
-        }
-
-        // Add similar checks for difficulty and type counts if you have their max available counts.
-
-        return true;
+      return true;
     }
 
-    // Generate test - MODIFIED TO MAKE API CALL
-async function generateTest() {
-    if (!validateInputs()) return;
+    // Persistent storage for question states
+    function getQuestionStates() {
+      const stored = localStorage.getItem('questionStates');
+      return stored ? new Map(JSON.parse(stored)) : new Map();
+    }
 
-    // Show loading state
-    const originalBtnText = generateBtn.innerHTML;
-    generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Generating...';
-    generateBtn.disabled = true;
+    function saveQuestionStates(states) {
+      const serializable = Array.from(states.entries());
+      localStorage.setItem('questionStates', JSON.stringify(serializable));
+    }
 
-    try {
-        const total = parseInt(totalQuestionsInput.value) || 0;
+    // Enhanced TestManager class
+    class TestManager {
+      constructor(questions) {
+        this.questions = questions;
+        this.questionStates = getQuestionStates();
+        this.currentTestSession = [];
+        this.currentQuestionIndex = 0;
+        this.score = 0;
+        
+        // Initialize states for new questions
+        questions.forEach(q => {
+          if (!this.questionStates.has(q.id)) {
+            this.questionStates.set(q.id, {
+              status: 'unattempted',
+              attempts: 0,
+              lastShown: null,
+              answeredCorrectly: false
+            });
+          }
+        });
+        
+        saveQuestionStates(this.questionStates);
+      }
+
+      startTest() {
+        // Create test session with questions not yet answered correctly
+        this.currentTestSession = this.questions.filter(q => {
+          const state = this.questionStates.get(q.id);
+          return !state.answeredCorrectly;
+        });
+        
+        // If we have fewer questions than needed, include some correct ones
+        if (this.currentTestSession.length < this.questions.length) {
+          const availableCorrect = this.questions.filter(q => {
+            const state = this.questionStates.get(q.id);
+            return state.answeredCorrectly && !this.currentTestSession.includes(q);
+          });
+          
+          // Add correct questions to meet total
+          const needed = this.questions.length - this.currentTestSession.length;
+          const additional = availableCorrect.slice(0, needed);
+          this.currentTestSession = [...this.currentTestSession, ...additional];
+        }
+        
+        // Shuffle questions
+        this.currentTestSession = this.shuffleArray(this.currentTestSession);
+        
+        this.currentQuestionIndex = 0;
+        this.score = 0;
+        return this.getCurrentQuestion();
+      }
+
+      shuffleArray(array) {
+        const newArray = [...array];
+        for (let i = newArray.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+        }
+        return newArray;
+      }
+
+      getCurrentQuestion() {
+        if (this.currentQuestionIndex < this.currentTestSession.length) {
+          const question = this.currentTestSession[this.currentQuestionIndex];
+          return {
+            ...question,
+            questionNumber: this.currentQuestionIndex + 1,
+            totalQuestions: this.currentTestSession.length
+          };
+        }
+        return null;
+      }
+
+      recordAnswer(isCorrect) {
+        const currentId = this.currentTestSession[this.currentQuestionIndex].id;
+        const state = this.questionStates.get(currentId);
+        
+        state.attempts++;
+        state.lastShown = new Date();
+        state.status = isCorrect ? 'correct' : 'wrong';
+        state.answeredCorrectly = isCorrect; // Update answeredCorrectly based on latest attempt
+        
+        if (isCorrect) {
+          this.score++;
+        }
+        
+        this.questionStates.set(currentId, state);
+        saveQuestionStates(this.questionStates);
+        
+        this.currentQuestionIndex++;
+        return this.getCurrentQuestion();
+      }
+
+      getSummary() {
+        const total = this.currentTestSession.length;
+        return {
+          score: this.score,
+          total,
+          percentage: Math.round((this.score / total) * 100),
+          wrongAnswers: total - this.score
+        };
+      }
+
+      getWrongQuestionIds() {
+        const wrongIds = [];
+        this.currentTestSession.forEach(q => {
+          const state = this.questionStates.get(q.id);
+          if (!state.answeredCorrectly) wrongIds.push(q.id);
+        });
+        return wrongIds;
+      }
+      
+      getRetestQuestions() {
+        return this.questions.filter(q => {
+          const state = this.questionStates.get(q.id);
+          return state && !state.answeredCorrectly;
+        });
+      }
+
+      resetBank() {
+        this.questionStates = new Map();
+        saveQuestionStates(this.questionStates);
+      }
+      
+      areAllCorrect() {
+        return this.currentTestSession.every(q => {
+          const state = this.questionStates.get(q.id);
+          return state && state.answeredCorrectly;
+        });
+      }
+    }
+
+    async function generateTest() {
+      if (!validateInputs()) return;
+
+      // Show loading state
+      const originalBtnText = generateBtn.innerHTML;
+      generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Generating...';
+      generateBtn.disabled = true;
+
+      try {
+        const totalRequested = parseInt(totalQuestionsInput.value) || 0;
+        const remainingBeforeRequest = TOTAL_QUESTION_BANK_SIZE - usedQuestionIds.size;
+
+        // Validate available questions
+        const availableMedium = 45; // From your UI
+        const requestedMedium = parseInt(mediumInput.value);
+        
+        if (requestedMedium > availableMedium) {
+          showAlert(
+            "Insufficient Medium Questions", 
+            `Only ${availableMedium} Medium questions available. ` +
+            `System will substitute with Hard questions where possible, then Easy.`
+          );
+        }
+
         const catA = parseInt(catAInput.value) || 0;
         const catB = parseInt(catBInput.value) || 0;
         const catC = parseInt(catCInput.value) || 0;
@@ -689,157 +860,415 @@ async function generateTest() {
         const fib = parseInt(fibInput.value) || 0;
         const tf = parseInt(tfInput.value) || 0;
         const qa = parseInt(qaInput.value) || 0;
+
+        // Get wrong answers to be retested
+        const wrongQuestionIds = testManager ? testManager.getWrongQuestionIds() : [];
 
         // Construct request body
         const requestBody = {
-            total_questions: total,
-            category_counts: { A: catA, B: catB, C: catC },
-            difficulty_counts: { Easy: easy, Medium: medium, Hard: hard },
-            type_counts: { 
-                'Fill in the Blanks': fib, 
-                'True/False': tf, 
-                'Question Answer': qa 
-            }
+          total_questions: totalRequested,
+          category_counts: { A: catA, B: catB, C: catC },
+          difficulty_counts: { Easy: easy, Medium: medium, Hard: hard },
+          type_counts: { 
+            'Fill in the Blanks': fib, 
+            'True/False': tf, 
+            'Question Answer': qa 
+          },
+          used_question_ids: Array.from(usedQuestionIds),
+          force_include_ids: wrongQuestionIds,
+          total_bank_size: TOTAL_QUESTION_BANK_SIZE,
+          allow_partial: true,
+          strict_difficulty: false, // Allow difficulty substitutions
+          exclude_correct: true // Exclude correctly answered questions
         };
 
         // API call
         const response = await fetch(`${API_BASE_URL}/generate-test`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+          const errorData = await response.json();
+          throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
         }
 
         const responseData = await response.json();
+        
+        // Handle question bank reset if needed
+        if (responseData.reset_question_bank) {
+          showAlert(
+            "Question Bank Reset", 
+            responseData.reset_message || "Question bank has been reset for the next test."
+          );
+          usedQuestionIds.clear();
+        }
+        
+        // Track the new question IDs
+        responseData.test.forEach(q => usedQuestionIds.add(q.id));
+        
         displayResults(responseData, catA, catB, catC, easy, medium, hard);
 
-    } catch (error) {
+      } catch (error) {
         console.error("Error generating test:", error);
         showAlert("Generation Error", error.message);
-    } finally {
+      } finally {
         generateBtn.innerHTML = originalBtnText;
         generateBtn.disabled = false;
+      }
     }
-}
 
-function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
-    const questions = responseData.test || [];
-    const messages = responseData.messages || [];
-    
-    // Calculate ACTUAL counts from the generated questions
-    const actualCatA = questions.filter(q => q.category === 'A').length;
-    const actualCatB = questions.filter(q => q.category === 'B').length;
-    const actualCatC = questions.filter(q => q.category === 'C').length;
+    function displayResults(responseData, catA, catB, catC, easy, medium, hard) {
+      const questions = responseData.test || [];
+      const messages = responseData.messages || [];
+      const adjustments = responseData.adjustments || [];
+      
+      // Calculate ACTUAL counts from the generated questions
+      const actualCatA = questions.filter(q => q.category === 'A').length;
+      const actualCatB = questions.filter(q => q.category === 'B').length;
+      const actualCatC = questions.filter(q => q.category === 'C').length;
 
-    const actualEasy = questions.filter(q => q.difficulty === 'Easy').length;
-    const actualMedium = questions.filter(q => q.difficulty === 'Medium').length;
-    const actualHard = questions.filter(q => q.difficulty === 'Hard').length;
+      const actualEasy = questions.filter(q => q.difficulty === 'Easy').length;
+      const actualMedium = questions.filter(q => q.difficulty === 'Medium').length;
+      const actualHard = questions.filter(q => q.difficulty === 'Hard').length;
 
-    // Update summary with ACTUAL counts
-    document.getElementById('summaryTotal').textContent = questions.length;
-    document.getElementById('summaryCatA').textContent = actualCatA;
-    document.getElementById('summaryCatB').textContent = actualCatB;
-    document.getElementById('summaryCatC').textContent = actualCatC;
-    document.getElementById('summaryEasy').textContent = actualEasy;
-    document.getElementById('summaryMedium').textContent = actualMedium;
-    document.getElementById('summaryHard').textContent = actualHard;
+      // Update summary with ACTUAL counts
+      document.getElementById('summaryTotal').textContent = questions.length;
+      document.getElementById('summaryCatA').textContent = actualCatA;
+      document.getElementById('summaryCatB').textContent = actualCatB;
+      document.getElementById('summaryCatC').textContent = actualCatC;
+      document.getElementById('summaryEasy').textContent = actualEasy;
+      document.getElementById('summaryMedium').textContent = actualMedium;
+      document.getElementById('summaryHard').textContent = actualHard;
 
-    // Update the distribution badges with ACTUAL counts
-    const distroBadgesContainer = document.querySelector('.alert-primary .d-flex.gap-2');
-    distroBadgesContainer.innerHTML = `
+      // Update the distribution badges with ACTUAL counts
+      const distroBadgesContainer = document.querySelector('.alert-primary .d-flex.gap-2');
+      distroBadgesContainer.innerHTML = `
         <span class="badge bg-primary distro-badge">A:${actualCatA}</span>
         <span class="badge bg-info distro-badge">B:${actualCatB}</span>
         <span class="badge bg-danger distro-badge">C:${actualCatC}</span>
-    `;
+      `;
 
-    // Clear previous questions
-    questionsList.innerHTML = '';
+      // Clear previous questions
+      questionsList.innerHTML = '';
 
-    // Remove any existing adjustment messages
-    const existingAlert = document.querySelector('#resultsContainer .alert.alert-warning');
-    if (existingAlert) {
+      // Remove any existing adjustment messages
+      const existingAlert = document.querySelector('#resultsContainer .alert.alert-warning');
+      if (existingAlert) {
         existingAlert.remove();
-    }
+      }
 
-    // Handle empty results
-    if (questions.length === 0) {
+      // Handle empty results
+      if (questions.length === 0) {
         questionsList.innerHTML = '<li class="list-group-item">No questions found matching the criteria.</li>';
         resultsContainer.classList.remove('d-none');
         resultsContainer.scrollIntoView({ behavior: 'smooth' });
         return;
-    }
+      }
 
-    // Render questions
-    questions.forEach((q, index) => {
+      // Handle adjustment messages
+      if (adjustments.length > 0) {
+        const alertBox = document.createElement('div');
+        alertBox.className = 'alert alert-warning mt-4';
+        
+        let adjustmentHTML = `
+          <h5 class="alert-heading d-flex align-items-center">
+            <i class="bi bi-info-circle me-2"></i>Test Adjustments
+          </h5>
+          <ul class="mb-0">`;
+
+        // Process each adjustment message
+        adjustments.forEach(adj => {
+          // Fix incorrect substitution messages
+          if (adj.includes("provided Hard instead") && adj.includes("Medium")) {
+            // Check if Easy was actually used
+            const easyUsed = actualEasy > easy;
+            if (easyUsed) {
+              adjustmentHTML += `<li>Could only provide ${actualMedium} out of ${medium} Medium questions (provided Easy instead)</li>`;
+              return;
+            }
+          }
+          adjustmentHTML += `<li>${adj}</li>`;
+        });
+
+        adjustmentHTML += `</ul>`;
+        alertBox.innerHTML = adjustmentHTML;
+        document.querySelector('#resultsContainer .card-body').prepend(alertBox);
+      }
+
+      // Render questions
+      questions.forEach((q, index) => {
         const li = document.createElement('li');
         li.className = 'list-group-item d-flex justify-content-between align-items-start question-item';
+        li.dataset.questionId = q.id;
 
-        // Add substituted class if this is a fallback question
-        if (q.is_fallback) {
-            li.classList.add('substituted-question');
-        }
-
+        // Determine if this is a substituted question
+        const isSubstituted = responseData.substituted_questions && 
+                              responseData.substituted_questions.includes(q.id);
+        
         // Badge classes
         const difficultyClass = 
-            q.difficulty === 'Easy' ? 'bg-success' :
-            q.difficulty === 'Medium' ? 'bg-warning text-dark' : 'bg-danger';
+          q.difficulty === 'Easy' ? 'bg-success' :
+          q.difficulty === 'Medium' ? 'bg-warning text-dark' : 'bg-danger';
         
         const typeClass = 
-            q.type === 'Fill in the Blanks' ? 'bg-primary' :
-            q.type === 'True/False' ? 'bg-info' : 'bg-purple';
+          q.type === 'Fill in the Blanks' ? 'bg-primary' :
+          q.type === 'True/False' ? 'bg-info' : 'bg-purple';
         
         const categoryClass = 
-            q.category === 'A' ? 'bg-primary' :
-            q.category === 'B' ? 'bg-info' : 'bg-danger';
+          q.category === 'A' ? 'bg-primary' :
+          q.category === 'B' ? 'bg-info' : 'bg-danger';
 
         // Category name mapping
         const getCategoryFullName = (categoryCode) => {
-            switch(categoryCode) {
-                case 'A': return 'General Knowledge';
-                case 'B': return 'Science & Technology';
-                case 'C': return 'History & Culture';
-                default: return categoryCode;
-            }
+          switch(categoryCode) {
+            case 'A': return 'General Knowledge';
+            case 'B': return 'Science & Technology';
+            case 'C': return 'History & Culture';
+            default: return categoryCode;
+          }
         };
 
+        // Check if this is a retest question
+        const isRetest = testManager && 
+                        testManager.questionStates.has(q.id) &&
+                        !testManager.questionStates.get(q.id).answeredCorrectly;
+
         li.innerHTML = `
-            <div class="ms-2 me-auto">
-                <div class="fw-bold">${index + 1}. ${q.question}</div>
-                <div class="mt-2 d-flex flex-wrap gap-1">
-                    <span class="badge ${difficultyClass} difficulty-badge">${q.difficulty}</span>
-                    <span class="badge ${typeClass} type-badge">${q.type}</span>
-                    <span class="badge bg-secondary category-badge">${getCategoryFullName(q.category)}</span>
-                </div>
+          <div class="ms-2 me-auto">
+            <div class="fw-bold">${index + 1}. ${q.question}</div>
+            <div class="mt-2 d-flex flex-wrap gap-1">
+              <span class="badge ${difficultyClass} difficulty-badge">${q.difficulty}</span>
+              <span class="badge ${typeClass} type-badge">${q.type}</span>
+              <span class="badge bg-secondary category-badge">${getCategoryFullName(q.category)}</span>
+              ${isSubstituted ? `
+                <span class="badge bg-warning text-dark">
+                  <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                  Substituted
+                </span>
+              ` : ''}
+              ${isRetest ? `
+                <span class="badge bg-warning text-dark">
+                  <i class="bi bi-arrow-repeat me-1"></i>
+                  Retest
+                </span>
+              ` : ''}
             </div>
-            <span class="badge ${categoryClass} rounded-pill">${q.category}</span>
+          </div>
+          <span class="badge ${categoryClass} rounded-pill">${q.category}</span>
         `;
         questionsList.appendChild(li);
-    });
+      });
 
-    // Show deviation messages if any exist
-    if (messages.length > 0) {
-        const alertBox = document.createElement('div');
-        alertBox.className = 'alert alert-warning mt-4';
-        alertBox.innerHTML = `
-            <h5 class="alert-heading d-flex align-items-center">
-                <i class="bi bi-info-circle me-2"></i>Test Adjustments
-            </h5>
-            <ul class="mb-0">
-                ${messages.map(m => `<li>${m}</li>`).join('')}
-            </ul>
-        `;
-        // Insert after the summary alert
-        document.querySelector('#resultsContainer .card-body').prepend(alertBox);
+      // Show results
+      resultsContainer.classList.remove('d-none');
+      resultsContainer.scrollIntoView({ behavior: 'smooth' });
     }
 
-    // Show results
-    resultsContainer.classList.remove('d-none');
-    resultsContainer.scrollIntoView({ behavior: 'smooth' });
-}
+    // Initialize test when Start Test button is clicked
+    startTestBtn.addEventListener('click', function() {
+      // Get all generated questions from the list
+      const questionElements = document.querySelectorAll('#questionsList .list-group-item');
+      const questions = Array.from(questionElements).map(el => {
+        return {
+          id: el.dataset.questionId,
+          question: el.querySelector('.fw-bold').textContent.replace(/^\d+\.\s/, ''),
+          category: el.querySelector('.rounded-pill').textContent,
+          difficulty: el.querySelector('.difficulty-badge').textContent,
+          type: el.querySelector('.type-badge').textContent
+        };
+      });
+      
+      // Initialize or reuse test manager
+      if (!testManager) {
+        testManager = new TestManager(questions);
+      } else {
+        // Update questions while maintaining state
+        testManager.questions = questions;
+      }
+      
+      const firstQuestion = testManager.startTest();
+      
+      if (firstQuestion) {
+        // Hide question list and show test interface
+        document.getElementById('questionsList').classList.add('d-none');
+        showQuestion(firstQuestion);
+      } else {
+        showAlert("Test Error", "No questions available to start test");
+      }
+    });
+
+    // Function to display a question
+    function showQuestion(questionData) {
+      if (!questionData) {
+        // Test complete
+        showTestResults();
+        return;
+      }
+      
+      // Create test interface
+      const testContainer = document.createElement('div');
+      testContainer.className = 'test-container p-4';
+      testContainer.innerHTML = `
+        <div class="progress mb-4">
+          <div class="progress-bar" role="progressbar" 
+              style="width: ${(questionData.questionNumber / questionData.totalQuestions) * 100}%">
+          </div>
+        </div>
+        
+        <div class="card mb-4">
+          <div class="card-header bg-light">
+            <h5>Question ${questionData.questionNumber} of ${questionData.totalQuestions}</h5>
+            <div class="d-flex gap-2">
+              <span class="badge ${getDifficultyClass(questionData.difficulty)}">
+                ${questionData.difficulty}
+              </span>
+              <span class="badge bg-secondary">
+                ${questionData.type}
+              </span>
+              ${isRetestQuestion(questionData.id) ? `
+                <span class="badge bg-warning text-dark">
+                  <i class="bi bi-arrow-repeat me-1"></i>
+                  Retest
+                </span>
+              ` : ''}
+            </div>
+          </div>
+          <div class="card-body">
+            <h4 class="card-title">${questionData.question}</h4>
+            
+            <div class="answer-options mt-4">
+              <button class="btn btn-outline-primary me-2 answer-btn" data-correct="true">
+                Correct Answer
+              </button>
+              <button class="btn btn-outline-danger answer-btn" data-correct="false">
+                Wrong Answer
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Replace existing content or add new
+      const testArea = document.querySelector('#resultsContainer .card-body');
+      const oldTest = testArea.querySelector('.test-container');
+      if (oldTest) oldTest.remove();
+      testArea.appendChild(testContainer);
+      
+      // Add event listeners to answer buttons
+      testContainer.querySelectorAll('.answer-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const isCorrect = this.dataset.correct === 'true';
+          const nextQuestion = testManager.recordAnswer(isCorrect);
+          showQuestion(nextQuestion);
+        });
+      });
+    }
+
+    function isRetestQuestion(questionId) {
+      if (!testManager) return false;
+      if (!testManager.questionStates.has(questionId)) return false;
+      
+      const state = testManager.questionStates.get(questionId);
+      return !state.answeredCorrectly && state.attempts > 0;
+    }
+
+    // Helper function for difficulty class
+    function getDifficultyClass(difficulty) {
+      return difficulty === 'Easy' ? 'bg-success' :
+            difficulty === 'Medium' ? 'bg-warning text-dark' : 'bg-danger';
+    }
+
+    // Show test results when complete
+    function showTestResults() {
+      const summary = testManager.getSummary();
+      const testArea = document.querySelector('#resultsContainer .card-body');
+      
+      // Check if all questions in the current test session are answered correctly
+      const allCorrect = testManager.areAllCorrect();
+      
+      if (allCorrect) {
+        testArea.innerHTML = `
+          <div class="text-center py-5">
+            <div class="display-1 text-success mb-3">🎉</div>
+            <h3>Perfect Score!</h3>
+            <p class="lead">You've answered all questions correctly!</p>
+            <div class="alert alert-success mt-4">
+              <i class="bi bi-info-circle me-2"></i>
+              The question bank will be reset automatically for your next test
+            </div>
+            <div class="mt-4">
+              <button class="btn btn-success" id="newTestAfterPerfect">
+                <i class="bi bi-plus-circle me-2"></i>Create New Test
+              </button>
+            </div>
+          </div>
+        `;
+        
+        document.getElementById('newTestAfterPerfect').addEventListener('click', () => {
+          resetQuestionBank();
+          location.reload();
+        });
+        return;
+      }
+      
+      // If not all correct, show results with option to retest wrong questions
+      const wrongQuestions = testManager.getRetestQuestions();
+      
+      testArea.innerHTML = `
+        <div class="text-center py-5">
+          <h3 class="text-success mb-4">Test Completed!</h3>
+          <div class="display-4 mb-3">${summary.score}/${summary.total}</div>
+          <div class="progress mb-4" style="height: 30px;">
+            <div class="progress-bar bg-success" 
+                style="width: ${summary.percentage}%">
+              ${summary.percentage}%
+            </div>
+          </div>
+          ${summary.wrongAnswers > 0 ? `
+            <div class="alert alert-warning mb-4">
+              <i class="bi bi-exclamation-triangle-fill me-2"></i>
+              You got ${summary.wrongAnswers} questions wrong. 
+              Retest to try these questions again.
+            </div>
+          ` : ''}
+          <div class="d-flex justify-content-center gap-3">
+            <button class="btn btn-primary" id="restartTestBtn">
+              <i class="bi bi-arrow-repeat me-2"></i>Retest Wrong Answers
+            </button>
+            <button class="btn btn-secondary" id="newTestBtn">
+              <i class="bi bi-plus-circle me-2"></i>New Test
+            </button>
+          </div>
+        </div>
+      `;
+      
+      // Add event listeners for the new buttons
+      document.getElementById('restartTestBtn').addEventListener('click', function() {
+        // Only include questions that were answered incorrectly
+        const retestQuestions = testManager.getRetestQuestions();
+        
+        if (retestQuestions.length === 0) {
+          showAlert("No Questions", "All questions were answered correctly!");
+          return;
+        }
+        
+        // Set up new test with wrong questions
+        testManager.currentTestSession = testManager.shuffleArray(retestQuestions);
+        testManager.currentQuestionIndex = 0;
+        testManager.score = 0;
+        
+        const firstQuestion = testManager.getCurrentQuestion();
+        if (firstQuestion) {
+          showQuestion(firstQuestion);
+        }
+      });
+      
+      document.getElementById('newTestBtn').addEventListener('click', function() {
+        location.reload();
+      });
+    }
   </script>
 </body>
 </html>
